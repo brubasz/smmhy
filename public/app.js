@@ -35,12 +35,14 @@ function extrairId(texto) {
   return /^[\w-]{11}$/.test(t) ? t : null;
 }
 
-function temLista(texto) {
+function extrairLista(texto) {
   try {
-    return new URL(texto.trim()).searchParams.has("list");
-  } catch {
-    return false;
-  }
+    const u = new URL(texto.trim());
+    if (!u.hostname.endsWith("youtube.com")) return null;
+    const lista = u.searchParams.get("list");
+    if (lista && /^[\w-]{10,80}$/.test(lista) && !lista.startsWith("RD")) return lista;
+  } catch {}
+  return null;
 }
 
 document.getElementById("entrar").addEventListener("click", () => {
@@ -142,16 +144,16 @@ socket.on("aviso", (msg) => (avisoEl.textContent = msg));
 
 function adicionar() {
   const texto = linkEl.value;
+  const lista = extrairLista(texto);
   const id = extrairId(texto);
-  if (!id) {
-    avisoEl.textContent = temLista(texto)
-      ? "Playlists chegam no próximo passo 😉 Por enquanto, cole o link de um vídeo."
-      : "Cole um link válido do YouTube.";
+  if (!lista && !id) {
+    avisoEl.textContent = "Cole um link válido do YouTube.";
     return;
   }
   avisoEl.textContent = "";
   linkEl.value = "";
-  socket.emit("adicionar", id);
+  if (lista) socket.emit("adicionarPlaylist", lista);
+  else socket.emit("adicionar", id);
 }
 
 document.getElementById("adicionar").addEventListener("click", adicionar);
