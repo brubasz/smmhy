@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>smmhy</title>
+</head>
+<body>
+  <h1>🎵 smmhy</h1>
+  <p id="status">Conectando...</p>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    socket.on("connect", () => {
+      document.getElementById("status").textContent = "Conectado ao servidor ✅";
+    });
+    socket.on("disconnect", () => {
+      document.getElementById("status").textContent = "Desconectado ❌";
+    });
+  </script>
+</body>
+</html>
