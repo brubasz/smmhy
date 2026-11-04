@@ -8,23 +8,39 @@
     body { font-family: system-ui, sans-serif; background: #12121a; color: #eee; max-width: 760px; margin: 0 auto; padding: 24px; }
     button, input { font-size: 1rem; padding: 10px 14px; border-radius: 8px; border: 1px solid #444; background: #1e1e2a; color: #eee; }
     button { cursor: pointer; background: #6c4cf1; border: none; }
-    input { width: calc(100% - 110px); }
+    button.secundario { background: #2a2a3a; }
+    .linha { display: flex; gap: 8px; }
+    .linha input { flex: 1; }
     #sala { display: none; }
     #aviso { color: #ffb86c; min-height: 1.5em; }
-    .video { aspect-ratio: 16 / 9; width: 100%; margin-top: 16px; }
+    .video { aspect-ratio: 16 / 9; width: 100%; margin-top: 8px; }
     .video iframe { width: 100%; height: 100%; }
+    .agora { font-weight: 600; margin: 12px 0 8px; }
+    ul { list-style: none; padding: 0; margin: 0; }
+    li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 10px; background: #1a1a26; border-radius: 8px; margin-bottom: 6px; }
+    li button { padding: 4px 10px; background: #3a2a3a; }
   </style>
 </head>
 <body>
   <h1>🎵 smmhy</h1>
   <p id="status">Conectando...</p>
-  <button id="entrar">Entrar na sala</button>
+
+  <div id="entrada">
+    <input id="nick" maxlength="20" placeholder="Seu nick" aria-label="Seu nick" />
+    <button id="entrar">Entrar na sala</button>
+  </div>
 
   <div id="sala">
-    <input id="link" placeholder="Cole um link do YouTube" />
-    <button id="tocar">Tocar</button>
-    <p id="aviso"></p>
+    <div class="linha">
+      <input id="link" placeholder="Cole um link de vídeo do YouTube" aria-label="Link do YouTube" />
+      <button id="adicionar">Adicionar</button>
+    </div>
+    <p id="aviso" role="status"></p>
     <div class="video"><div id="player"></div></div>
+    <p id="agora" class="agora"></p>
+    <button id="pular" class="secundario">⏭ Pular</button>
+    <h2>Fila</h2>
+    <ul id="fila"></ul>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
