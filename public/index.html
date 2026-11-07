@@ -11,7 +11,12 @@
     button.secundario { background: #2a2a3a; }
     .linha { display: flex; gap: 8px; }
     .linha input { flex: 1; }
-    #sala { display: none; }
+    #auth, #sala, #usuario, #entrar { display: none; }
+    #auth label { display: block; margin: 12px 0 4px; }
+    #auth input { width: 100%; box-sizing: border-box; }
+    #auth button { margin-top: 12px; }
+    #erroAuth { color: #ff7b7b; min-height: 1.5em; }
+    #usuario { align-items: center; gap: 12px; margin-bottom: 12px; }
     #aviso { color: #ffb86c; min-height: 1.5em; }
     .video { aspect-ratio: 16 / 9; width: 100%; margin-top: 8px; }
     .video iframe { width: 100%; height: 100%; }
@@ -25,10 +30,28 @@
   <h1>🎵 smmhy</h1>
   <p id="status">Conectando...</p>
 
-  <div id="entrada">
-    <input id="nick" maxlength="20" placeholder="Seu nick" aria-label="Seu nick" />
-    <button id="entrar">Entrar na sala</button>
+  <div id="auth">
+    <h2 id="tituloAuth">Entrar</h2>
+    <form id="formAuth">
+      <label for="email">E-mail</label>
+      <input id="email" type="email" autocomplete="email" required />
+      <div id="campoNick">
+        <label for="nick">Nick</label>
+        <input id="nick" maxlength="20" autocomplete="nickname" />
+      </div>
+      <label for="senha">Senha</label>
+      <input id="senha" type="password" minlength="8" maxlength="72" autocomplete="current-password" required />
+      <button id="enviarAuth" type="submit">Entrar</button>
+    </form>
+    <p id="erroAuth" role="alert"></p>
+    <button id="trocarAuth" class="secundario" type="button">Criar uma conta</button>
   </div>
+
+  <div id="usuario">
+    <span id="saudacao"></span>
+    <button id="sair" class="secundario" type="button">Sair</button>
+  </div>
+  <button id="entrar" type="button">Entrar na sala</button>
 
   <div id="sala">
     <div class="linha">

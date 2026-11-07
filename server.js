@@ -2,12 +2,29 @@ require("dotenv").config();
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
+const { iniciar } = require("./db");
+const { router: authRouter, usuarioDoCabecalho } = require("./auth");
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
+if (process.env.NODE_ENV === "production") app.set("trust proxy", 1);
+
+app.use(express.json({ limit: "10kb" }));
+app.use("/api", authRouter);
 app.use(express.static("public"));
+
+io.use(async (socket, next) => {
+  try {
+    const usuario = await usuarioDoCabecalho(socket.handshake.headers.cookie);
+    if (!usuario) return next(new Error("nao_autenticado"));
+    socket.data.user = usuario;
+    next();
+  } catch {
+    next(new Error("nao_autenticado"));
+  }
+});
 
 const ID_VALIDO = /^[\w-]{11}$/;
 const LISTA_VALIDA = /^[\w-]{10,80}$/;
@@ -97,11 +114,7 @@ async function buscarPlaylist(listId) {
 }
 
 io.on("connection", (socket) => {
-  console.log("Alguém conectou:", socket.id);
-
-  socket.on("entrar", (nick) => {
-    socket.data.nick = String(nick || "").trim().slice(0, 20) || "Anônimo";
-  });
+  console.log("Conectou:", socket.data.user.nick);
 
   socket.on("pedirEstado", () => {
     socket.emit("fila", listaFila());
@@ -125,7 +138,7 @@ io.on("connection", (socket) => {
       );
       return;
     }
-    const item = { id: proximoId++, videoId, titulo, nick: socket.data.nick || "Anônimo" };
+    const item = { id: proximoId++, videoId, titulo, nick: socket.data.user.nick };
     sala.fila.push(item);
     if (!sala.atual) tocarProximo();
     else io.emit("fila", listaFila());
@@ -149,7 +162,7 @@ io.on("connection", (socket) => {
       socket.emit("aviso", "Nenhum vídeo disponível para adicionar.");
       return;
     }
-    const nick = socket.data.nick || "Anônimo";
+    const nick = socket.data.user.nick;
     escolhidos.forEach((v) =>
       sala.fila.push({ id: proximoId++, videoId: v.videoId, titulo: v.titulo, nick })
     );
@@ -175,10 +188,17 @@ io.on("connection", (socket) => {
     if (atualizar(false, position)) socket.broadcast.emit("estado", estadoAtual());
   });
 
-  socket.on("disconnect", () => console.log("Alguém saiu:", socket.id));
+  socket.on("disconnect", () => console.log("Saiu:", socket.data.user.nick));
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`smmhy rodando em http://localhost:${PORT}`);
-});
+iniciar()
+  .then(() => {
+    server.listen(PORT, () => {
+      console.log(`smmhy rodando em http://localhost:${PORT}`);
+    });
+  })
+  .catch((e) => {
+    console.error("Não consegui iniciar o banco:", e.message);
+    process.exit(1);
+  });

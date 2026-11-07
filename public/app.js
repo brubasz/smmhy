@@ -1,25 +1,108 @@
-const socket = io();
+const socket = io({ autoConnect: false });
 const statusEl = document.getElementById("status");
 const avisoEl = document.getElementById("aviso");
 const agoraEl = document.getElementById("agora");
 const filaEl = document.getElementById("fila");
-const nickEl = document.getElementById("nick");
 const linkEl = document.getElementById("link");
+const authEl = document.getElementById("auth");
+const usuarioEl = document.getElementById("usuario");
+const entrarEl = document.getElementById("entrar");
+const salaEl = document.getElementById("sala");
+const saudacaoEl = document.getElementById("saudacao");
+const erroAuthEl = document.getElementById("erroAuth");
+const tituloAuthEl = document.getElementById("tituloAuth");
+const campoNickEl = document.getElementById("campoNick");
+const enviarAuthEl = document.getElementById("enviarAuth");
+const trocarAuthEl = document.getElementById("trocarAuth");
+const emailEl = document.getElementById("email");
+const nickEl = document.getElementById("nick");
+const senhaEl = document.getElementById("senha");
 
 let player = null;
 let playerPronto = false;
 let itemAtual = null;
-let meuNick = "";
 let ignorarAte = 0;
+let modoCadastro = false;
 
-nickEl.value = localStorage.getItem("smmhy_nick") || "";
+async function chamarApi(caminho, metodo, corpo) {
+  try {
+    const r = await fetch(caminho, {
+      method: metodo,
+      headers: { "Content-Type": "application/json" },
+      body: corpo ? JSON.stringify(corpo) : undefined,
+    });
+    const dados = await r.json().catch(() => ({}));
+    return { ok: r.ok, dados };
+  } catch {
+    return { ok: false, dados: { erro: "Não consegui falar com o servidor." } };
+  }
+}
+
+function mostrarAuth() {
+  statusEl.textContent = "Entre ou crie uma conta para usar a sala.";
+  authEl.style.display = "block";
+  usuarioEl.style.display = "none";
+  entrarEl.style.display = "none";
+  salaEl.style.display = "none";
+}
+
+function mostrarLogado(nick) {
+  authEl.style.display = "none";
+  usuarioEl.style.display = "flex";
+  entrarEl.style.display = "inline-block";
+  saudacaoEl.textContent = `Olá, ${nick}!`;
+  if (!socket.connected) socket.connect();
+}
+
+function ajustarModo() {
+  tituloAuthEl.textContent = modoCadastro ? "Criar conta" : "Entrar";
+  enviarAuthEl.textContent = modoCadastro ? "Criar conta" : "Entrar";
+  trocarAuthEl.textContent = modoCadastro ? "Já tenho conta" : "Criar uma conta";
+  campoNickEl.style.display = modoCadastro ? "block" : "none";
+  nickEl.required = modoCadastro;
+  senhaEl.autocomplete = modoCadastro ? "new-password" : "current-password";
+  erroAuthEl.textContent = "";
+}
+
+trocarAuthEl.addEventListener("click", () => {
+  modoCadastro = !modoCadastro;
+  ajustarModo();
+});
+
+document.getElementById("formAuth").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  erroAuthEl.textContent = "";
+  enviarAuthEl.disabled = true;
+  const corpo = { email: emailEl.value, senha: senhaEl.value };
+  if (modoCadastro) corpo.nick = nickEl.value;
+  const { ok, dados } = await chamarApi(
+    modoCadastro ? "/api/cadastro" : "/api/login",
+    "POST",
+    corpo
+  );
+  enviarAuthEl.disabled = false;
+  if (!ok) {
+    erroAuthEl.textContent = dados.erro || "Algo deu errado.";
+    return;
+  }
+  senhaEl.value = "";
+  mostrarLogado(dados.nick);
+});
+
+document.getElementById("sair").addEventListener("click", async () => {
+  await chamarApi("/api/sair", "POST");
+  location.reload();
+});
 
 socket.on("connect", () => {
   statusEl.textContent = "Conectado ao servidor ✅";
-  if (meuNick) socket.emit("entrar", meuNick);
   if (playerPronto) socket.emit("pedirEstado");
 });
 socket.on("disconnect", () => (statusEl.textContent = "Desconectado ❌"));
+socket.on("connect_error", (err) => {
+  if (err.message === "nao_autenticado") mostrarAuth();
+  else statusEl.textContent = "Não consegui conectar ao servidor.";
+});
 
 function extrairId(texto) {
   const t = texto.trim();
@@ -45,21 +128,13 @@ function extrairLista(texto) {
   return null;
 }
 
-document.getElementById("entrar").addEventListener("click", () => {
-  const nick = nickEl.value.trim();
-  if (!nick) {
-    statusEl.textContent = "Escolha um nick para entrar.";
-    return;
-  }
+entrarEl.addEventListener("click", () => {
   if (typeof YT === "undefined" || !YT.Player) {
     statusEl.textContent = "Carregando o player... tente de novo em um instante.";
     return;
   }
-  meuNick = nick;
-  localStorage.setItem("smmhy_nick", nick);
-  socket.emit("entrar", nick);
-  document.getElementById("entrada").style.display = "none";
-  document.getElementById("sala").style.display = "block";
+  entrarEl.style.display = "none";
+  salaEl.style.display = "block";
   player = new YT.Player("player", {
     width: "100%",
     height: "100%",
@@ -163,3 +238,10 @@ linkEl.addEventListener("keydown", (e) => {
 document.getElementById("pular").addEventListener("click", () => {
   if (itemAtual !== null) socket.emit("pular", itemAtual);
 });
+
+ajustarModo();
+(async () => {
+  const { ok, dados } = await chamarApi("/api/eu", "GET");
+  if (ok) mostrarLogado(dados.nick);
+  else mostrarAuth();
+})();
