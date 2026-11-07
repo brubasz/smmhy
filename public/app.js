@@ -8,15 +8,25 @@ const authEl = document.getElementById("auth");
 const usuarioEl = document.getElementById("usuario");
 const entrarEl = document.getElementById("entrar");
 const salaEl = document.getElementById("sala");
+const perfilEl = document.getElementById("perfil");
 const saudacaoEl = document.getElementById("saudacao");
+const avisoPerfilEl = document.getElementById("avisoPerfil");
 const erroAuthEl = document.getElementById("erroAuth");
 const tituloAuthEl = document.getElementById("tituloAuth");
 const campoNickEl = document.getElementById("campoNick");
+const campoFotoEl = document.getElementById("campoFoto");
 const enviarAuthEl = document.getElementById("enviarAuth");
 const trocarAuthEl = document.getElementById("trocarAuth");
 const emailEl = document.getElementById("email");
 const nickEl = document.getElementById("nick");
 const senhaEl = document.getElementById("senha");
+const fotoEl = document.getElementById("foto");
+const trocarFotoEl = document.getElementById("trocarFoto");
+const removerFotoEl = document.getElementById("removerFoto");
+
+const LADO_FOTO = 512;
+const MAX_ORIGINAL = 5 * 1024 * 1024;
+const MAX_ENVIO = 250 * 1024;
 
 let player = null;
 let playerPronto = false;
@@ -38,6 +48,91 @@ async function chamarApi(caminho, metodo, corpo) {
   }
 }
 
+function inicial(nick) {
+  const el = document.createElement("span");
+  el.className = "avatar";
+  el.textContent = String(nick || "?").trim().charAt(0).toUpperCase();
+  return el;
+}
+
+function criarAvatar(nick, userId, fotoV) {
+  if (!fotoV) return inicial(nick);
+  const img = document.createElement("img");
+  img.className = "avatar";
+  img.alt = "";
+  img.src = `/api/foto/${userId}?v=${fotoV}`;
+  img.addEventListener("error", () => img.replaceWith(inicial(nick)));
+  return img;
+}
+
+function paraBlob(canvas, qualidade) {
+  return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", qualidade));
+}
+
+function reduzirImagem(arquivo) {
+  return new Promise((resolve, reject) => {
+    if (!arquivo || !/^image\/(jpeg|png|webp)$/.test(arquivo.type)) {
+      reject(new Error("Escolha uma imagem JPG, PNG ou WebP."));
+      return;
+    }
+    if (arquivo.size > MAX_ORIGINAL) {
+      reject(new Error("A imagem tem mais de 5 MB."));
+      return;
+    }
+    const url = URL.createObjectURL(arquivo);
+    const img = new Image();
+    img.onload = async () => {
+      URL.revokeObjectURL(url);
+      const lado = Math.min(img.width, img.height);
+      const alvo = Math.max(1, Math.min(lado, LADO_FOTO));
+      const canvas = document.createElement("canvas");
+      canvas.width = alvo;
+      canvas.height = alvo;
+      const ctx = canvas.getContext("2d");
+      ctx.imageSmoothingQuality = "high";
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, alvo, alvo);
+      ctx.drawImage(
+        img,
+        (img.width - lado) / 2,
+        (img.height - lado) / 2,
+        lado,
+        lado,
+        0,
+        0,
+        alvo,
+        alvo
+      );
+      for (const qualidade of [0.9, 0.8, 0.7, 0.6, 0.5, 0.4]) {
+        const blob = await paraBlob(canvas, qualidade);
+        if (blob && blob.size <= MAX_ENVIO) {
+          resolve(blob);
+          return;
+        }
+      }
+      reject(new Error("Não consegui deixar a imagem pequena o bastante."));
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Não consegui ler essa imagem."));
+    };
+    img.src = url;
+  });
+}
+
+async function enviarFoto(arquivo) {
+  const blob = await reduzirImagem(arquivo);
+  const r = await fetch("/api/foto", {
+    method: "PUT",
+    headers: { "Content-Type": "image/jpeg" },
+    body: blob,
+  });
+  if (!r.ok) {
+    const dados = await r.json().catch(() => ({}));
+    throw new Error(dados.erro || "Não consegui enviar a foto.");
+  }
+}
+
 function mostrarAuth() {
   statusEl.textContent = "Entre ou crie uma conta para usar a sala.";
   authEl.style.display = "block";
@@ -46,11 +141,13 @@ function mostrarAuth() {
   salaEl.style.display = "none";
 }
 
-function mostrarLogado(nick) {
+function mostrarLogado(u) {
   authEl.style.display = "none";
   usuarioEl.style.display = "flex";
   entrarEl.style.display = "inline-block";
-  saudacaoEl.textContent = `Olá, ${nick}!`;
+  perfilEl.replaceChildren(criarAvatar(u.nick, u.id, u.fotoV));
+  saudacaoEl.textContent = u.nick;
+  removerFotoEl.style.display = u.fotoV ? "inline-block" : "none";
   if (!socket.connected) socket.connect();
 }
 
@@ -59,6 +156,7 @@ function ajustarModo() {
   enviarAuthEl.textContent = modoCadastro ? "Criar conta" : "Entrar";
   trocarAuthEl.textContent = modoCadastro ? "Já tenho conta" : "Criar uma conta";
   campoNickEl.style.display = modoCadastro ? "block" : "none";
+  campoFotoEl.style.display = modoCadastro ? "block" : "none";
   nickEl.required = modoCadastro;
   senhaEl.autocomplete = modoCadastro ? "new-password" : "current-password";
   erroAuthEl.textContent = "";
@@ -86,7 +184,38 @@ document.getElementById("formAuth").addEventListener("submit", async (e) => {
     return;
   }
   senhaEl.value = "";
-  mostrarLogado(dados.nick);
+  const arquivo = modoCadastro ? fotoEl.files[0] : null;
+  if (arquivo) {
+    try {
+      await enviarFoto(arquivo);
+      location.reload();
+      return;
+    } catch (err) {
+      avisoPerfilEl.textContent = `Conta criada, mas a foto não foi enviada: ${err.message}`;
+    }
+  }
+  mostrarLogado(dados);
+});
+
+document.getElementById("trocarFotoBtn").addEventListener("click", () => trocarFotoEl.click());
+
+trocarFotoEl.addEventListener("change", async () => {
+  const arquivo = trocarFotoEl.files[0];
+  if (!arquivo) return;
+  avisoPerfilEl.textContent = "Enviando foto...";
+  try {
+    await enviarFoto(arquivo);
+    location.reload();
+  } catch (err) {
+    avisoPerfilEl.textContent = err.message;
+    trocarFotoEl.value = "";
+  }
+});
+
+removerFotoEl.addEventListener("click", async () => {
+  const { ok, dados } = await chamarApi("/api/foto", "DELETE");
+  if (ok) location.reload();
+  else avisoPerfilEl.textContent = dados.erro || "Não consegui remover a foto.";
 });
 
 document.getElementById("sair").addEventListener("click", async () => {
@@ -135,6 +264,7 @@ entrarEl.addEventListener("click", () => {
   }
   entrarEl.style.display = "none";
   salaEl.style.display = "block";
+  usuarioEl.classList.add("compacto");
   player = new YT.Player("player", {
     width: "100%",
     height: "100%",
@@ -198,19 +328,27 @@ socket.on("estado", (s) => {
 });
 
 socket.on("fila", ({ atual, fila }) => {
-  agoraEl.textContent = atual
-    ? `▶ ${atual.titulo} — por ${atual.nick}`
-    : "Nada tocando. Adicione um link!";
+  agoraEl.replaceChildren();
+  if (atual) {
+    const t = document.createElement("span");
+    t.textContent = `▶ ${atual.titulo} — por ${atual.nick}`;
+    agoraEl.append(criarAvatar(atual.nick, atual.userId, atual.fotoV), t);
+  } else {
+    agoraEl.textContent = "Nada tocando. Adicione um link!";
+  }
   filaEl.replaceChildren();
   fila.forEach((item) => {
     const li = document.createElement("li");
+    const info = document.createElement("span");
+    info.className = "info";
     const texto = document.createElement("span");
     texto.textContent = `${item.titulo} — por ${item.nick}`;
+    info.append(criarAvatar(item.nick, item.userId, item.fotoV), texto);
     const btn = document.createElement("button");
     btn.textContent = "✕";
     btn.setAttribute("aria-label", `Remover ${item.titulo}`);
     btn.addEventListener("click", () => socket.emit("remover", item.id));
-    li.append(texto, btn);
+    li.append(info, btn);
     filaEl.appendChild(li);
   });
 });
@@ -242,6 +380,6 @@ document.getElementById("pular").addEventListener("click", () => {
 ajustarModo();
 (async () => {
   const { ok, dados } = await chamarApi("/api/eu", "GET");
-  if (ok) mostrarLogado(dados.nick);
+  if (ok) mostrarLogado(dados);
   else mostrarAuth();
 })();

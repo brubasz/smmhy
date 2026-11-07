@@ -21,7 +21,8 @@ io.use(async (socket, next) => {
     if (!usuario) return next(new Error("nao_autenticado"));
     socket.data.user = usuario;
     next();
-  } catch {
+  } catch (e) {
+    console.error("Erro ao autenticar o socket:", e.message);
     next(new Error("nao_autenticado"));
   }
 });
@@ -138,7 +139,8 @@ io.on("connection", (socket) => {
       );
       return;
     }
-    const item = { id: proximoId++, videoId, titulo, nick: socket.data.user.nick };
+    const { id: userId, nick, fotoV } = socket.data.user;
+    const item = { id: proximoId++, videoId, titulo, nick, userId, fotoV };
     sala.fila.push(item);
     if (!sala.atual) tocarProximo();
     else io.emit("fila", listaFila());
@@ -162,9 +164,9 @@ io.on("connection", (socket) => {
       socket.emit("aviso", "Nenhum vídeo disponível para adicionar.");
       return;
     }
-    const nick = socket.data.user.nick;
+    const { id: userId, nick, fotoV } = socket.data.user;
     escolhidos.forEach((v) =>
-      sala.fila.push({ id: proximoId++, videoId: v.videoId, titulo: v.titulo, nick })
+      sala.fila.push({ id: proximoId++, videoId: v.videoId, titulo: v.titulo, nick, userId, fotoV })
     );
     if (!sala.atual) tocarProximo();
     else io.emit("fila", listaFila());
